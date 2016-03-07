@@ -1,6 +1,7 @@
+import re
+
 from markdown import Markdown
-from flask_restful import reqparse
-from flask.ext.restplus import marshal_with, Resource
+from flask.ext.restplus import reqparse, marshal_with, Resource
 import flask.ext.restplus.fields as model_fields
 
 from funcy import compose, partial, rpartial, constantly
@@ -15,7 +16,8 @@ class Parser:
       'number': {
         'marshaler':
           lambda f: model_fields.Float(),
-        'pytype': float,
+        'pytype':
+          int, #float,
       },
       'boolean': {
         'marshaler':
@@ -84,17 +86,35 @@ class Parser:
     typename_marshaler = self.get_typename_marshaler(outer_typename)
     return (field.name, typename_marshaler(field))
 
-  def add_parameters(self, parser, parameters):
+  def add_parameters(self, impl, parameters):
     for parameter in parameters:
-      parser.add_argument(
-        parameter.name,
-        dest=parameter.name,
-        location='form',
+      impl.parser.add_argument(parameter.name,
         type=self.typename_map[parameter.type]['pytype'],
-        required=parameter.required,
+        required=bool(parameter.required),
         help=parameter.description,
         default=parameter.value
       )
+      impl.parameters[parameter.name] = parameter
+
+  urlparam_typemap = {
+    'string': 'string',
+    'number': 'int',
+  }
+
+  def mkuri(self, uri, parameters):
+    flask_uri = ''
+    path = re.compile(r'((?<=^)|(?<=}))(?P<before>.*){(?P<arg>\w+)}')
+    for match in path.finditer(uri):
+      arg = match.group('arg')
+      param = parameters[arg]
+      flask_uri += ''.join([
+        match.group('before'),
+        '<{}:{}>'.format(
+          self.urlparam_typemap[param.type],
+          arg
+        ),
+      ])
+    return (flask_uri or uri)
 
 
 
@@ -112,8 +132,7 @@ class Schema:
       for resource in self.api_spec.resources
     }
 
-  @staticmethod
-  def decorate_method(impl, method):
+  def decorate_method(self, impl, method):
     print('decorating {}::{}'.format(impl, method))
     try:
       undecorated_method = getattr(impl, method)
@@ -127,7 +146,10 @@ class Schema:
     setattr(
       impl,
       method,
-      marshal_with(impl.model)(undecorated_method)
+      compose(
+        self.api.doc(parser=impl.parser),
+        marshal_with(impl.model)
+      )(undecorated_method)
     )
 
   def get_model(self, action):
@@ -146,15 +168,19 @@ class Schema:
 
       impl.parser = reqparse.RequestParser()
 
+      impl.parameters = {}
       if resource.parameters:
-        self.parser.add_parameters(impl.parser, resource.parameters)
+        self.parser.add_parameters(impl, resource.parameters)
 
       for action in resource._actions.values():
         impl.model = self.get_model(action)
         self.decorate_method(impl, action.request_method.lower())
 
-      print('adding {} to {} at {}'.format(impl, self.api, uri))
-      self.api.add_resource(impl, uri)
+
+      flask_uri = self.parser.mkuri(uri, impl.parameters)
+      print('adding {} to {} at {}'.format(impl, self.api, flask_uri))
+      self.api.add_resource(impl, flask_uri)
+
       return impl
     return decorator
 
