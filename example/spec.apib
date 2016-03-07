@@ -1,0 +1,122 @@
+FORMAT: 1A
+HOST: https://curator.dhcp.egr.msu.edu/
+
+# AMEASUREv1
+
+AMEASUREv1 is an electrochemical sensing testbench capable of
+arbitrary waveform generation and high-speed data acquisition on
+multiple channels.
+
+## Arbitrary waveform generation [/wave]
+
+### List waveform capabilities [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+        + channels (array[Channel])
+        + formats (array[WaveSerializationFormat])
+
+## Codec channels [/wave/channel/{channel_id}]
+
++ Parameters
+    + channel_id (number) - Physical channel for waveform playback
+
+### Codec channel detail [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (object)
+        + url: `/wave/channel/0` (string) - href for this channel detail
+
+## Waveform format [/wave/format/{format_name}]
+
++ Parameters
+
+    + format_name (string) - Specifies the serialization format of a waveform to be downloaded.
+
+### Waveform format detail [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (WaveSerializationFormat)
+
+
+## Downloaded waveforms [/wave/load]
+
+### List loaded waveforms [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (array[Waveform])
+
+### Download a waveform [POST]
+
++ Request (application/json)
+
+        + (Waveform)
+
++ Response 201 (application/json)
+
+    + Headers
+
+            Location: /wave/load/0
+
+    + Attributes (Waveform)
+
+## Downloaded waveform [/wave/load/{id}]
+
++ Parameters
+
+    + id (number)
+
+### Examine downloaded waveform detail [GET]
+
++ Response 201 (application/json)
+
+    + Attributes (array[Waveform])
+
+## Active waveforms [/wave/active]
+
+### List active waveforms [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (array[Channel])
+
+
+# Data Structures
+
+## Waveform (object)
+
++ id (number)
++ format (string)
++ binary (string)
++ playback (PlaybackParams)
+
+## WaveSerializationFormat (object)
+
++ format (string) - Name of the format
++ encoding (enum) - Method for encoding the data payload
+    + base16 (string)
++ checksum (enum)
+    + none (string)
+    + crc
++ parameters (array)
+    + (string)
+
+## Channel (object)
+
++ channel (number) - Unique identifier of the codec channel
++ direction (enum) - Whether the channel is for recording or playback
+    + `in`  (string)
+    + `out` (string)
++ f_s (number) - Samples per second configured by the channel
++ v_max (number) - Maximum output voltage on the channel
++ bitdepth (number) - Number of bits of resolution for sampling/playback on the channel
+
+## PlaybackParams (object)
+
++ frequency (number)
++ amplitude (number)
++ offset (number)
